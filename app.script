@@ -1,0 +1,488 @@
+// Google Apps Script Backend untuk
+const SHEET_NAME = 'ToDoList';
+
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  // Periksa apakah parameter e ada
+  if (!e) {
+    return createErrorResponse('No request data received');
+  }
+  
+  // Ambil parameter dari URL (GET) atau dari post body (POST)
+  let params = {};
+  
+  if (e.parameter) {
+    // Untuk GET request
+    params = e.parameter;
+  } else if (e.postData && e.postData.contents) {
+    // Untuk POST request dengan JSON
+    try {
+      params = JSON.parse(e.postData.contents);
+    } catch (error) {
+      return createErrorResponse('Invalid JSON in POST data');
+    }
+  }
+  
+  const action = params.action;
+  
+  if (!action) {
+    return createErrorResponse('No action specified');
+  }
+  
+  let result;
+  
+  try {
+    switch(action) {
+      case 'getTasks':
+        result = getTasks();
+        break;
+      case 'addTask':
+        result = addTask(params.text);
+        break;
+      case 'updateTask':
+        result = updateTask(
+          params.id,
+          params.text,
+          params.completed === 'true' || params.completed === true
+        );
+        break;
+      case 'deleteTask':
+        result = deleteTask(params.id);
+        break;
+      case 'test':
+        result = testConnection();
+        break;
+      case 'setup':
+        result = setupSheet();
+        break;
+      default:
+        result = { 
+          success: false, 
+          message: 'Action not found',
+          availableActions: ['getTasks', 'addTask', 'updateTask', 'deleteTask', 'test', 'setup']
+        };
+    }
+  } catch (error) {
+    console.error('Error in action ' + action + ':', error);
+    result = { 
+      success: false, 
+      error: error.toString(),
+      message: 'Internal server error'
+    };
+  }
+  
+  return createJsonResponse(result);
+}
+
+function testConnection() {
+  return { 
+    success: true, 
+    message: 'Apps Script backend is working!',
+    timestamp: new Date().toISOString(),
+    sheetName: SHEET_NAME
+  };
+}
+
+function getTasks() {
+  try {
+    const sheet = getSheet();
+    const data = sheet.getDataRange().getValues();
+    
+    // Jika hanya ada header, return array kosong
+    if (data.length <= 1) {
+      return { success: true, tasks: [] };
+    }
+    
+    // Lewati header (baris pertama)
+    const tasks = [];
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      
+      // Pastikan row memiliki data yang cukup
+      if (row.length >= 3) {
+        const task = {
+          id: row[0] || '',
+          text: row[1] || '',
+          completed: row[2] === true || row[2] === 'TRUE' || row[2] === 'true',
+          createdAt: row[3] || new Date().toISOString()
+        };
+        
+        // Hanya tambahkan jika ada ID dan text
+        if (task.id && task.text) {
+          tasks.push(task);
+        }
+      }
+    }
+    
+    return { 
+      success: true, 
+      tasks: tasks,
+      count: tasks.length
+    };
+  } catch (error) {
+    console.error('Error in getTasks:', error);
+    return { 
+      success: false, 
+      error: error.toString(),
+      message: 'Failed to get tasks from sheet'
+    };
+  }
+}
+
+function addTask(text) {
+  if (!text || text.trim() === '') {
+    return { 
+      success: false, 
+      message: 'Task text cannot be empty'
+    };
+  }
+  
+  try {
+    const sheet = getSheet();
+    const id = Utilities.getUuid();
+    const now = new Date().toISOString();
+    
+    sheet.appendRow([id, text.trim(), false, now]);
+    
+    return { 
+      success: true, 
+      id: id, 
+      message: 'Task added successfully',
+      task: {
+        id: id,
+        text: text.trim(),
+        completed: false,
+        createdAt: now
+      }
+    };
+  } catch (error) {
+    console.error('Error in addTask:', error);
+    return { 
+      success: false, 
+      error: error.toString(),
+      message: 'Failed to add task'
+    };
+  }
+}
+
+function updateTask(id, text, completed) {
+  if (!id) {
+    return { 
+      success: false, 
+      message: 'Task ID is required'
+    };
+  }
+  
+  try {
+    const sheet = getSheet();
+    const data = sheet.getDataRange().getValues();
+    
+    let found = false;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === id) {
+        // Update text jika diberikan
+        if (text !== undefined && text !== null) {
+          sheet.getRange(i + 1, 2).setValue(text);
+        }
+        
+        // Update completed status jika diberikan
+        if (completed !== undefined && completed !== null) {
+          sheet.getRange(i + 1, 3).setValue(completed);
+        }
+        
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      return { 
+        success: false, 
+        message: 'Task not found with ID: ' + id
+      };
+    }
+    
+    return { 
+      success: true, 
+      message: 'Task updated successfully',
+      id: id,
+      text: text,
+      completed: completed
+    };
+  } catch (error) {
+    console.error('Error in updateTask:', error);
+    return { 
+      success: false, 
+      error: error.toString(),
+      message: 'Failed to update task'
+    };
+  }
+}
+
+function deleteTask(id) {
+  if (!id) {
+    return { 
+      success: false, 
+      message: 'Task ID is required'
+    };
+  }
+  
+  try {
+    const sheet = getSheet();
+    const data = sheet.getDataRange().getValues();
+    
+    let found = false;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === id) {
+        sheet.deleteRow(i + 1);
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      return { 
+        success: false, 
+        message: 'Task not found with ID: ' + id
+      };
+    }
+    
+    return { 
+      success: true, 
+      message: 'Task deleted successfully',
+      id: id
+    };
+  } catch (error) {
+    console.error('Error in deleteTask:', error);
+    return { 
+      success: false, 
+      error: error.toString(),
+      message: 'Failed to delete task'
+    };
+  }
+}
+
+function getSheet() {
+  try {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = spreadsheet.getSheetByName(SHEET_NAME);
+    
+    if (!sheet) {
+      // Buat sheet baru jika belum ada
+      sheet = spreadsheet.insertSheet(SHEET_NAME);
+      
+      // Tambahkan header
+      sheet.appendRow(['ID', 'Task', 'Completed', 'Created At']);
+      
+      // Format header
+      const headerRange = sheet.getRange('A1:D1');
+      headerRange.setFontWeight('bold');
+      headerRange.setBackground('#4CAF50');
+      headerRange.setFontColor('#FFFFFF');
+      
+      // Atur lebar kolom
+      sheet.setColumnWidth(1, 250); // ID
+      sheet.setColumnWidth(2, 400); // Task
+      sheet.setColumnWidth(3, 100); // Completed
+      sheet.setColumnWidth(4, 200); // Created At
+      
+      console.log('Created new sheet: ' + SHEET_NAME);
+    }
+    
+    return sheet;
+  } catch (error) {
+    console.error('Error in getSheet:', error);
+    throw new Error('Failed to access spreadsheet: ' + error.toString());
+  }
+}
+
+function setupSheet() {
+  try {
+    const sheet = getSheet();
+    const lastRow = sheet.getLastRow();
+    const lastColumn = sheet.getLastColumn();
+    
+    return { 
+      success: true, 
+      message: 'Sheet setup completed successfully',
+      sheetName: SHEET_NAME,
+      dimensions: {
+        rows: lastRow,
+        columns: lastColumn
+      },
+      headers: ['ID', 'Task', 'Completed', 'Created At']
+    };
+  } catch (error) {
+    console.error('Error in setupSheet:', error);
+    return { 
+      success: false, 
+      error: error.toString(),
+      message: 'Failed to setup sheet'
+    };
+  }
+}
+
+// Helper function untuk membuat response error
+function createErrorResponse(message) {
+  return createJsonResponse({
+    success: false,
+    message: message,
+    timestamp: new Date().toISOString()
+  });
+}
+
+// Helper function untuk membuat JSON response
+function createJsonResponse(data) {
+  // Di Apps Script, kita tidak bisa chain setHeader()
+  // Kita harus membuat output terlebih dahulu
+  const output = ContentService.createTextOutput(JSON.stringify(data));
+  output.setMimeType(ContentService.MimeType.JSON);
+  
+  // Untuk CORS headers, kita bisa mengembalikan objek dengan properti tambahan
+  // Atau menggunakan teknik yang berbeda
+  return output;
+}
+
+// Function untuk dijalankan manual dari editor Apps Script
+function manualTest() {
+  console.log('Running manual test...');
+  
+  // Test setup
+  const setupResult = setupSheet();
+  console.log('Setup result:', JSON.stringify(setupResult));
+  
+  // Test add task
+  const addResult = addTask('Test task from manual test');
+  console.log('Add result:', JSON.stringify(addResult));
+  
+  // Test get tasks
+  const getResult = getTasks();
+  console.log('Get result tasks count:', getResult.tasks ? getResult.tasks.length : 0);
+  
+  // Test update task
+  if (addResult.success && getResult.success && getResult.tasks && getResult.tasks.length > 0) {
+    const taskId = getResult.tasks[0].id;
+    const updateResult = updateTask(taskId, 'Updated test task', true);
+    console.log('Update result:', JSON.stringify(updateResult));
+    
+    // Test delete task
+    const deleteResult = deleteTask(taskId);
+    console.log('Delete result:', JSON.stringify(deleteResult));
+  }
+  
+  console.log('Manual test completed');
+  return 'Manual test completed. Check logs for details.';
+}
+
+// Function untuk membersihkan semua data (hati-hati!)
+function clearAllData() {
+  try {
+    const sheet = getSheet();
+    const lastRow = sheet.getLastRow();
+    
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, 4).clearContent();
+      return { 
+        success: true, 
+        message: 'All task data cleared successfully',
+        rowsCleared: lastRow - 1
+      };
+    } else {
+      return { 
+        success: true, 
+        message: 'No data to clear',
+        rowsCleared: 0
+      };
+    }
+  } catch (error) {
+    console.error('Error in clearAllData:', error);
+    return { 
+      success: false, 
+      error: error.toString(),
+      message: 'Failed to clear data'
+    };
+  }
+}
+
+// Function untuk enable CORS - alternatif approach
+function doGetWithCORS(e) {
+  // Handle request seperti biasa
+  const result = handleRequest(e);
+  
+  // Jika result adalah TextOutput (dari createJsonResponse)
+  if (result && typeof result.setMimeType === 'function') {
+    // Untuk mengatasi CORS, kita bisa menggunakan HtmlService atau teknik lain
+    // Cara sederhana: return sebagai HTML dengan script untuk parse JSON
+    const jsonData = JSON.parse(result.getContent());
+    return HtmlService.createHtmlOutput(
+      `<script>
+        window.parent.postMessage(${JSON.stringify(jsonData)}, '*');
+      </script>`
+    ).setTitle('API Response');
+  }
+  
+  return result;
+}
+
+// Versi sederhana tanpa CORS issues
+function simpleDoGet(e) {
+  try {
+    const params = e ? e.parameter : {};
+    const action = params.action || 'test';
+    
+    let result;
+    
+    switch(action) {
+      case 'getTasks':
+        result = getTasks();
+        break;
+      case 'addTask':
+        result = addTask(params.text);
+        break;
+      case 'updateTask':
+        result = updateTask(params.id, params.text, params.completed === 'true');
+        break;
+      case 'deleteTask':
+        result = deleteTask(params.id);
+        break;
+      case 'test':
+        result = testConnection();
+        break;
+      case 'setup':
+        result = setupSheet();
+        break;
+      default:
+        result = { success: false, message: 'Action not found' };
+    }
+    
+    // Return sebagai JSON sederhana
+    return ContentService
+      .createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        success: false,
+        error: error.toString(),
+        message: 'Server error'
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Function utama yang sebaiknya digunakan
+function mainDoGet(e) {
+  return simpleDoGet(e);
+}
+
+function mainDoPost(e) {
+  return simpleDoGet(e); // Handle POST sama seperti GET untuk kesederhanaan
+}

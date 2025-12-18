@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Projek Mini: To-Do List dengan Apps Script</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="background-mesh"></div>
+    <div class="container">
+      <header>
+        <h1><i class="fas fa-tasks"></i> To-Do List dengan Apps Script</h1>
+        <p class="subtitle">Backend database menggunakan Google Apps Script</p>
+      </header>
+
+      <div class="input-section">
+        <input
+          type="text"
+          id="taskInput"
+          placeholder="Tambahkan tugas baru..."
+        />
+        <button id="addBtn"><i class="fas fa-plus"></i> Tambah</button>
+      </div>
+
+      <div class="stats">
+        <div class="task-count">
+          Total: <span id="totalTasks">0</span> tugas
+        </div>
+        <div class="completed-count">
+          Selesai: <span id="completedTasks">0</span> tugas
+        </div>
+      </div>
+
+      <div id="appStatus" class="status-message"></div>
+
+      <div class="filter-buttons">
+        <button class="filter-btn active" data-filter="all">Semua</button>
+        <button class="filter-btn" data-filter="pending">Belum Selesai</button>
+        <button class="filter-btn" data-filter="completed">Selesai</button>
+      </div>
+
+      <ul id="taskList" class="task-list">
+        <li class="empty-state" id="emptyState">
+          <i class="fas fa-clipboard-list"></i>
+          <h3>Tidak ada tugas</h3>
+          <p>Tambahkan tugas baru untuk memulai</p>
+        </li>
+      </ul>
+    </div>
+    <div class="config-section">
+      <h3><i class="fas fa-cog"></i> Konfigurasi Apps Script</h3>
+      <input
+        type="text"
+        id="scriptUrl"
+        class="config-input"
+        placeholder="URL Web Apps Script"
+      />
+      <div>
+        <button id="saveConfigBtn" class="config-button">
+          <i class="fas fa-save"></i> Simpan URL
+        </button>
+        <button id="testConnectionBtn" class="config-button secondary">
+          <i class="fas fa-wifi"></i> Test Koneksi
+        </button>
+        <button id="loadTasksBtn" class="config-button success">
+          <i class="fas fa-sync"></i> Muat Tugas
+        </button>
+      </div>
+      <div id="configStatus" class="status-message"></div>
+    </div>
+    <footer>
+      <p>Projek Mini - To-Do List dengan Google Apps Script Backend</p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
